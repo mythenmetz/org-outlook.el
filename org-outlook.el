@@ -184,53 +184,56 @@
                   "'**************************************
 ' Name: URLEncode Function
 ' Description:Encodes a string to create legally formatted
-'QueryString for URL. This function is more flexible
-'than the IIS Server.Encode function because you can
-'pass in the WHOLE URL and only the QueryString data
-'will be converted. IIS strangely converts EVERYTHING
-'(ie \"http://\" becomes \"http%3A%2F%2F\").
-' By: Markus Diersbock
+' QueryString for URL. 
 '
 ' Inputs:sRawURL - String to Encode
 '
 ' Returns:Encoded String
 '
 'This code is copyrighted and has' limited warranties.
-'Please see http://www.Planet-Source-Code.com/vb/scripts/ShowCode.asp?txtCodeId=43806&lngWId=1'for details.
+'Please see http://stackoverflow.com/questions/218181/how-can-i-url-encode-a-string-in-excel-vba  for details.
+' This is a variant that supports UTF-8 encoding and is based on ADODB.Stream
+' (include a reference to a recent version of the Microsoft ActiveX Data Objects library in your project, i.e. add it from Tools->References Menu)
 '**************************************
+Public Function URLEncode( _
+   StringVal As String, _
+   Optional SpaceAsPlus As Boolean = False _
+) As String
+  Dim bytes() As Byte, b As Byte, i As Integer, space As String
 
-' Changed by Matthew Fidler to have http:// become http%3A%2F%2F
-' Also changed to have spaces be %20 instead of +
+  If SpaceAsPlus Then space = \"+\" Else space = \"%20\"
 
+  If Len(StringVal) > 0 Then
+    With New ADODB.Stream
+      .Mode = adModeReadWrite
+      .Type = adTypeText
+      .Charset = \"UTF-8\"
+      .Open
+      .WriteText StringVal
+      .Position = 0
+      .Type = adTypeBinary
+      .Position = 3 ' skip BOM
+      bytes = .Read
+    End With
 
-Public Function URLEncode(sRawURL As String) As String
-    On Error GoTo Catch
-    Dim iLoop As Integer
-    Dim sRtn As String
-    Dim sTmp As String
-    Const sValidChars = \"1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz\"
-    If Len(sRawURL) > 0 Then
-        ' Loop through each char
-        For iLoop = 1 To Len(sRawURL)
-            sTmp = Mid(sRawURL, iLoop, 1)
-            If InStr(1, sValidChars, sTmp, vbBinaryCompare) = 0 Then
-                ' If not ValidChar, convert to HEX and prefix with %
-                sTmp = Hex(Asc(sTmp))
-                If Len(sTmp) = 1 Then
-                    sTmp = \"%0\" & sTmp
-                Else
-                    sTmp = \"%\" & sTmp
-                End If
-            End If
-            sRtn = sRtn & sTmp
-        Next iLoop
-        URLEncode = sRtn
-    End If
-Finally:
-    Exit Function
-Catch:
-    URLEncode = \"\"
-    Resume Finally
+    ReDim result(UBound(bytes)) As String
+
+    For i = UBound(bytes) To 0 Step -1
+      b = bytes(i)
+      Select Case b
+        Case 97 To 122, 65 To 90, 48 To 57, 45, 46, 95, 126
+          result(i) = Chr(b)
+        Case 32
+          result(i) = space
+        Case 0 To 15
+          result(i) = \"%0\" & Hex(b)
+        Case Else
+          result(i) = \"%\" & Hex(b)
+      End Select
+    Next i
+
+    URLEncode = Join(result, \"\")
+  End If
 End Function
 
 ' From http://www.freevbcode.com/ShowCode.asp?ID=3476
@@ -306,7 +309,7 @@ Sub CreateTaskFromItem()
     ' DoEvents
     
     
-    Set objWeb = CreateObject(\"InternetExplorer.Application\")
+
     
         
     If Outlook.Application.ActiveExplorer.Selection.Count > 0 Then
@@ -335,6 +338,7 @@ CanMove:
                     + \"/\" + URLEncode(SndName) _
                     + \"/\" + URLEncode(SndEmailAddress) _
                     '+ \"/\" + URLEncode(objMail.Body)
+            Set objWeb = CreateObject(\"InternetExplorer.Application\")
             objWeb.Navigate T
             objWeb.Visible = True
         Next
